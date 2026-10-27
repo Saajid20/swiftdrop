@@ -87,6 +87,10 @@ Mobile-friendly. Use the `@/components/ui` kit. Validate on the client for UX, b
 - 2026-10-27: Added authorized PDF receipts for customer-owned parcels, with deterministic filenames,
   privacy-safe content and LKR minor-unit formatting. Integration coverage verifies PDF responses,
   cross-customer 404 behavior and non-customer role denial.
+- 2026-10-27: Added the customer booking form and `POST /parcels` wrapper. The form validates all
+  booking fields, requests real M7 estimates, invalidates stale estimates and only shows success
+  after M4 returns a created parcel. Wrapper tests mock M4 only and cover field mapping, ownership,
+  role restrictions and rejection of client-sent fees.
 - Remaining blockers: booking confirmation requires M4's `ParcelsService.create()` implementation;
   price estimates require M7's `PricingService.estimate()` implementation; detail-page live status
   requires M4's tracking hook and SSE implementation.

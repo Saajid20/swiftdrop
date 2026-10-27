@@ -1,5 +1,21 @@
 import request from 'supertest';
+import { ParcelsService } from '../../src/modules/parcels';
 import { createTestApp, type TestContext } from '../utils/app';
+
+const VALID_BOOKING = {
+  senderName: 'Nimali Customer',
+  senderPhone: '+94770000001',
+  pickupAddress: '12 Galle Road',
+  pickupCity: 'colombo',
+  recipientName: 'Test Recipient',
+  recipientPhone: '+94770000002',
+  recipientEmail: 'recipient@example.com',
+  dropoffAddress: '5 Temple Street',
+  dropoffCity: 'kandy',
+  size: 'SMALL',
+  weightKg: 1.5,
+  description: 'Books',
+} as const;
 
 const RESPONSE_FIELDS = [
   'id',
@@ -22,12 +38,15 @@ const RESPONSE_FIELDS = [
 describe('customer bookings', () => {
   let t: TestContext;
   let seededParcelId: string;
+  let customerId: string;
+  let createParcel: jest.SpiedFunction<ParcelsService['create']>;
 
   beforeAll(async () => {
     t = await createTestApp();
     const customer = await t.prisma.user.findUniqueOrThrow({
       where: { email: 'customer@swiftdrop.test' },
     });
+    customerId = customer.id;
     const customer2 = await t.prisma.user.findUniqueOrThrow({
       where: { email: 'customer2@swiftdrop.test' },
     });
@@ -35,6 +54,7 @@ describe('customer bookings', () => {
       where: { trackingNumber: 'SD100000001' },
     });
     seededParcelId = seededParcel.id;
+    createParcel = jest.spyOn(t.app.get(ParcelsService), 'create').mockResolvedValue(seededParcel);
     const common = {
       senderName: 'M03 Sender',
       senderPhone: '+94770000001',
@@ -78,11 +98,53 @@ describe('customer bookings', () => {
   });
 
   afterAll(async () => {
+    createParcel.mockRestore();
     await t.prisma.parcel.deleteMany({
       where: { id: { in: ['m03-page-a', 'm03-page-b', 'm03-customer-2'] } },
     });
     await t.close();
   });
+
+  beforeEach(() => createParcel.mockClear());
+
+  it('maps a customer booking to ParcelsService without accepting ownership or fee fields', async () => {
+    const response = await request(t.http)
+      .post('/api/v1/parcels')
+      .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
+      .send(VALID_BOOKING)
+      .expect(201);
+
+    expect(createParcel).toHaveBeenCalledWith(
+      { ...VALID_BOOKING, source: 'CUSTOMER', customerId },
+      'CUSTOMER',
+    );
+    expect(response.body).toMatchObject({ trackingNumber: 'SD100000001', status: 'CREATED' });
+  });
+
+  it('rejects a client-sent fee before parcel creation', async () => {
+    const response = await request(t.http)
+      .post('/api/v1/parcels')
+      .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
+      .send({ ...VALID_BOOKING, feeCents: 1 })
+      .expect(400);
+
+    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+    expect(createParcel).not.toHaveBeenCalled();
+  });
+
+  it.each(['COURIER', 'MERCHANT'] as const)(
+    'denies the %s role from booking parcels',
+    async (role) => {
+      const response = await request(t.http)
+        .post('/api/v1/parcels')
+        .set('Cookie', await t.cookieFor(role))
+        .send(VALID_BOOKING)
+        .expect(403);
+
+      expect(response.body.error.code).toBe('FORBIDDEN');
+      expect(createParcel).not.toHaveBeenCalled();
+    },
+  );
 
   it('lists only the authenticated customer parcels and excludes private fields', async () => {
     const response = await request(t.http)

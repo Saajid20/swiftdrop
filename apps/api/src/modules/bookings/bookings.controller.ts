@@ -1,5 +1,11 @@
 import { Body, Controller, Get, Param, Post, Query, StreamableFile } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
+import {
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser, Roles, type AuthUser } from '../../common/auth';
 import { ParcelDto } from '../parcels';
 import { BookingsService } from './bookings.service';
@@ -14,7 +20,7 @@ export class BookingsController {
 
   @Post()
   @ApiOperation({ summary: 'Book a delivery (customer)' })
-  @ApiOkResponse({ type: ParcelDto })
+  @ApiCreatedResponse({ type: ParcelDto })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateBookingDto) {
     return this.bookings.create(user, dto);
   }

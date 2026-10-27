@@ -22,8 +22,12 @@ export class BookingsService {
     private readonly parcels: ParcelsService,
   ) {}
 
-  async create(_user: AuthUser, _dto: CreateBookingDto): Promise<ParcelDto> {
-    notImplemented('M3'); // TODO(M3): this.parcels.create({ ...dto, source: 'CUSTOMER', customerId: user.id }, user.role)
+  async create(user: AuthUser, dto: CreateBookingDto): Promise<ParcelDto> {
+    const parcel = await this.parcels.create(
+      { ...dto, source: 'CUSTOMER', customerId: user.id },
+      user.role,
+    );
+    return toParcelDto(parcel);
   }
 
   async listMine(user: AuthUser, q: ListMyParcelsQuery): Promise<Paginated<ParcelDto>> {
