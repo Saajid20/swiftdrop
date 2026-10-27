@@ -6,109 +6,21 @@ import { useRef, useState } from 'react';
 import { PARCEL_SIZES } from '@swiftdrop/contracts';
 import { Alert, Button, Card, FormField, Input, Select, Textarea } from '@/components/ui';
 import { api } from '@/lib/api/client';
-import { errorCode, errorMessage } from '@/lib/api/errors';
 import type { components } from '@/lib/api/schema';
+import {
+  bookingErrors,
+  bookingPayload,
+  ESTIMATE_FIELDS,
+  estimateErrors,
+  estimatePayload,
+  INITIAL_VALUES,
+  type FormErrors,
+  type FormValues,
+} from './booking-form.logic';
+import { requestBookingCreation, requestBookingEstimate } from './booking.requests';
 
-type BookingPayload = components['schemas']['CreateBookingDto'];
 type Estimate = components['schemas']['EstimateResponseDto'];
 type CreatedParcel = components['schemas']['ParcelDto'];
-type FormValues = Omit<BookingPayload, 'size' | 'weightKg' | 'recipientEmail' | 'description'> & {
-  size: BookingPayload['size'] | '';
-  weightKg: string;
-  recipientEmail: string;
-  description: string;
-};
-type FormErrors = Partial<Record<keyof FormValues, string>>;
-
-const PHONE = /^\+?[0-9]{9,15}$/;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ESTIMATE_FIELDS = new Set<keyof FormValues>([
-  'pickupCity',
-  'dropoffCity',
-  'size',
-  'weightKg',
-]);
-
-const INITIAL_VALUES: FormValues = {
-  senderName: '',
-  senderPhone: '',
-  pickupAddress: '',
-  pickupCity: '',
-  recipientName: '',
-  recipientPhone: '',
-  recipientEmail: '',
-  dropoffAddress: '',
-  dropoffCity: '',
-  size: '',
-  weightKg: '',
-  description: '',
-};
-
-function textError(value: string, label: string, min: number, max: number) {
-  const length = value.trim().length;
-  if (length < min) return `${label} must be at least ${min} characters`;
-  if (length > max) return `${label} must be at most ${max} characters`;
-  return undefined;
-}
-
-function estimateErrors(values: FormValues): FormErrors {
-  const errors: FormErrors = {};
-  errors.pickupCity = textError(values.pickupCity, 'Pickup city', 2, 80);
-  errors.dropoffCity = textError(values.dropoffCity, 'Drop-off city', 2, 80);
-  if (!values.size) errors.size = 'Select a parcel size';
-  const weight = Number(values.weightKg);
-  if (!values.weightKg.trim() || !Number.isFinite(weight) || weight < 0.01 || weight > 100) {
-    errors.weightKg = 'Weight must be between 0.01 kg and 100 kg';
-  }
-  return Object.fromEntries(Object.entries(errors).filter(([, value]) => value));
-}
-
-function bookingErrors(values: FormValues): FormErrors {
-  const errors = estimateErrors(values);
-  errors.senderName = textError(values.senderName, 'Sender name', 2, 100);
-  errors.pickupAddress = textError(values.pickupAddress, 'Pickup address', 5, 200);
-  errors.recipientName = textError(values.recipientName, 'Recipient name', 2, 100);
-  errors.dropoffAddress = textError(values.dropoffAddress, 'Drop-off address', 5, 200);
-  if (!PHONE.test(values.senderPhone.trim())) {
-    errors.senderPhone = 'Enter a valid phone number with 9 to 15 digits';
-  }
-  if (!PHONE.test(values.recipientPhone.trim())) {
-    errors.recipientPhone = 'Enter a valid phone number with 9 to 15 digits';
-  }
-  if (values.recipientEmail.trim() && !EMAIL.test(values.recipientEmail.trim())) {
-    errors.recipientEmail = 'Enter a valid email address';
-  }
-  if (values.description.length > 500) {
-    errors.description = 'Description must be at most 500 characters';
-  }
-  return Object.fromEntries(Object.entries(errors).filter(([, value]) => value));
-}
-
-function estimatePayload(values: FormValues): components['schemas']['EstimateRequestDto'] {
-  return {
-    pickupCity: values.pickupCity.trim().toLowerCase(),
-    dropoffCity: values.dropoffCity.trim().toLowerCase(),
-    size: values.size as BookingPayload['size'],
-    weightKg: Number(values.weightKg),
-  };
-}
-
-function bookingPayload(values: FormValues): BookingPayload {
-  return {
-    senderName: values.senderName.trim(),
-    senderPhone: values.senderPhone.trim(),
-    pickupAddress: values.pickupAddress.trim(),
-    pickupCity: values.pickupCity.trim().toLowerCase(),
-    recipientName: values.recipientName.trim(),
-    recipientPhone: values.recipientPhone.trim(),
-    ...(values.recipientEmail.trim() ? { recipientEmail: values.recipientEmail.trim() } : {}),
-    dropoffAddress: values.dropoffAddress.trim(),
-    dropoffCity: values.dropoffCity.trim().toLowerCase(),
-    size: values.size as BookingPayload['size'],
-    weightKg: Number(values.weightKg),
-    ...(values.description.trim() ? { description: values.description.trim() } : {}),
-  };
-}
 
 function formatFee(estimate: Estimate) {
   return new Intl.NumberFormat('en-LK', {
@@ -116,6 +28,11 @@ function formatFee(estimate: Estimate) {
     currency: estimate.currency,
     minimumFractionDigits: 2,
   }).format(estimate.feeCents / 100);
+}
+
+function focusFirstError(errors: FormErrors) {
+  const firstField = Object.keys(errors)[0];
+  if (firstField) requestAnimationFrame(() => document.getElementById(firstField)?.focus());
 }
 
 export function BookingForm() {
@@ -145,28 +62,23 @@ export function BookingForm() {
     const nextErrors = estimateErrors(values);
     setErrors(nextErrors);
     setSubmitError(undefined);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      focusFirstError(nextErrors);
+      return;
+    }
 
     const revision = estimateRevision.current;
     setEstimating(true);
     setEstimateError(undefined);
     try {
-      const { data, error } = await api.POST('/api/v1/pricing/estimate', {
-        body: estimatePayload(values),
-      });
+      const result = await requestBookingEstimate(estimatePayload(values), (body) =>
+        api.POST('/api/v1/pricing/estimate', { body }),
+      );
       if (estimateRevision.current !== revision) return;
-      if (data) {
-        setEstimate(data);
+      if (result.ok) {
+        setEstimate(result.data);
       } else {
-        setEstimateError(
-          errorCode(error) === 'ZONE_NOT_SERVICED'
-            ? 'SwiftDrop does not currently serve one of those cities.'
-            : errorMessage(error, 'Unable to calculate a price right now'),
-        );
-      }
-    } catch {
-      if (estimateRevision.current === revision) {
-        setEstimateError('Unable to calculate a price right now');
+        setEstimateError(result.message);
       }
     } finally {
       setEstimating(false);
@@ -178,7 +90,10 @@ export function BookingForm() {
     const nextErrors = bookingErrors(values);
     setErrors(nextErrors);
     setSubmitError(undefined);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      focusFirstError(nextErrors);
+      return;
+    }
     if (!estimate) {
       setSubmitError('Get an up-to-date price before confirming this booking.');
       return;
@@ -186,17 +101,15 @@ export function BookingForm() {
 
     setSubmitting(true);
     try {
-      const { data, error } = await api.POST('/api/v1/parcels', {
-        body: bookingPayload(values),
-      });
-      if (data) {
-        setCreated(data);
+      const result = await requestBookingCreation(bookingPayload(values), (body) =>
+        api.POST('/api/v1/parcels', { body }),
+      );
+      if (result.ok) {
+        setCreated(result.data);
         router.refresh();
       } else {
-        setSubmitError(errorMessage(error, 'Unable to confirm this booking'));
+        setSubmitError(result.message);
       }
-    } catch {
-      setSubmitError('Unable to confirm this booking');
     } finally {
       setSubmitting(false);
     }
@@ -204,25 +117,25 @@ export function BookingForm() {
 
   if (created) {
     return (
-      <Card className="max-w-2xl">
+      <Card className="max-w-2xl" aria-live="polite">
         <Alert tone="success">Your delivery has been booked.</Alert>
         <h2 className="mt-5 text-xl font-semibold">Tracking number</h2>
-        <p className="mt-2 font-mono text-2xl font-semibold tracking-wide">
+        <p className="mt-2 break-all font-mono text-2xl font-semibold tracking-wide">
           {created.trackingNumber}
         </p>
         <p className="mt-2 text-sm text-muted">
           Keep this number to follow the delivery from pickup to completion.
         </p>
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <Link
             href={`/customer/parcels/${created.id}`}
-            className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark"
+            className="rounded-md bg-brand px-4 py-2 text-center text-sm font-medium text-white hover:bg-brand-dark"
           >
             View delivery
           </Link>
           <Link
             href="/customer"
-            className="rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium hover:bg-canvas"
+            className="rounded-md border border-line bg-surface px-4 py-2 text-center text-sm font-medium hover:bg-canvas"
           >
             My deliveries
           </Link>
@@ -232,8 +145,38 @@ export function BookingForm() {
   }
 
   return (
-    <form onSubmit={confirmBooking} noValidate className="max-w-4xl space-y-6">
-      {(estimateError || submitError) && <Alert tone="error">{submitError ?? estimateError}</Alert>}
+    <form
+      onSubmit={confirmBooking}
+      noValidate
+      className="max-w-4xl space-y-6"
+      aria-busy={estimating || submitting}
+    >
+      {(estimateError || submitError) && (
+        <div aria-live="assertive">
+          <Alert tone="error">{submitError ?? estimateError}</Alert>
+        </div>
+      )}
+
+      {Object.values(errors).some(Boolean) && (
+        <Alert tone="error">
+          <div aria-labelledby="booking-errors-title">
+            <p id="booking-errors-title" className="font-medium">
+              Review the highlighted fields
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {Object.entries(errors).map(([field, message]) =>
+                message ? (
+                  <li key={field}>
+                    <a href={`#${field}`} className="underline">
+                      {message}
+                    </a>
+                  </li>
+                ) : null,
+              )}
+            </ul>
+          </div>
+        </Alert>
+      )}
 
       <Card className="space-y-8">
         <section aria-labelledby="sender-heading">
@@ -435,8 +378,8 @@ export function BookingForm() {
         </section>
       </Card>
 
-      <div className="rounded-lg border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-lg border border-line bg-surface p-5" aria-live="polite">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Delivery price</h2>
             {estimate ? (
@@ -450,17 +393,32 @@ export function BookingForm() {
               </p>
             )}
           </div>
-          <Button type="button" variant="secondary" disabled={estimating} onClick={getEstimate}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full sm:w-auto"
+            disabled={estimating || submitting}
+            aria-busy={estimating}
+            onClick={getEstimate}
+          >
             {estimating ? 'Getting price...' : estimate ? 'Refresh price' : 'Get price'}
           </Button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Link href="/customer" className="px-3 py-2 text-sm font-medium text-muted hover:text-ink">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+        <Link
+          href="/customer"
+          className="px-3 py-2 text-center text-sm font-medium text-muted hover:text-ink"
+        >
           Cancel
         </Link>
-        <Button type="submit" disabled={!estimate || submitting || estimating}>
+        <Button
+          type="submit"
+          className="w-full sm:w-auto"
+          disabled={!estimate || submitting || estimating}
+          aria-busy={submitting}
+        >
           {submitting ? 'Confirming...' : 'Confirm booking'}
         </Button>
       </div>

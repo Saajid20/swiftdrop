@@ -112,7 +112,7 @@ describe('customer bookings', () => {
 
   beforeEach(() => createParcel.mockClear());
 
-  it('maps a customer booking to ParcelsService without accepting ownership or fee fields', async () => {
+  it('returns 201 with the mocked M4 tracking number and server-calculated fee', async () => {
     const response = await request(t.http)
       .post('/api/v1/parcels')
       .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
@@ -123,7 +123,12 @@ describe('customer bookings', () => {
       { ...VALID_BOOKING, source: 'CUSTOMER', customerId },
       'CUSTOMER',
     );
-    expect(response.body).toMatchObject({ trackingNumber: 'SD100000001', status: 'CREATED' });
+    expect(response.body).toMatchObject({
+      trackingNumber: 'SD100000001',
+      status: 'CREATED',
+      feeCents: 52500,
+      currency: 'LKR',
+    });
   });
 
   it('rejects a client-sent fee before parcel creation', async () => {

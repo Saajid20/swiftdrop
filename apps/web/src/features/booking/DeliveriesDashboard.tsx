@@ -10,6 +10,7 @@ import {
   Table,
 } from '@/components/ui';
 import type { components } from '@/lib/api/schema';
+import { ProofOfDeliveryPhoto } from './ProofOfDeliveryPhoto';
 
 type DeliveryPage = components['schemas']['ParcelPageDto'];
 type Delivery = components['schemas']['ParcelDto'];
@@ -264,6 +265,10 @@ export function ParcelDetails({ parcel }: { parcel: CustomerParcel }) {
           </dl>
         </Card>
       </div>
+
+      {parcel.status === 'DELIVERED' && (
+        <ProofOfDeliveryPhoto parcelId={parcel.id} trackingNumber={parcel.trackingNumber} />
+      )}
 
       <Card className="mt-5">
         <div>

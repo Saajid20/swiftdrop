@@ -39,6 +39,7 @@ test('renders persisted parcel details, timeline and receipt link', () => {
   assert.match(markup, /In transit/);
   assert.match(markup, /LKR/);
   assert.match(markup, /href="\/api\/v1\/parcels\/parcel-1\/receipt"/);
+  assert.doesNotMatch(markup, /Proof of delivery/);
 });
 
 test('does not invent timeline entries when no history is available', () => {
@@ -46,4 +47,19 @@ test('does not invent timeline entries when no history is available', () => {
 
   assert.match(markup, /No status updates are available yet/);
   assert.doesNotMatch(markup, /Picked up/);
+});
+
+test('includes the M6 proof display only for delivered parcels', () => {
+  const markup = renderToStaticMarkup(
+    <ParcelDetails
+      parcel={{
+        ...parcel,
+        status: 'DELIVERED',
+        deliveredAt: '2026-10-27T12:00:00.000Z',
+      }}
+    />,
+  );
+
+  assert.match(markup, /Proof of delivery/);
+  assert.match(markup, /Loading proof photo/);
 });
