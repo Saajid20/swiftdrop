@@ -21,6 +21,7 @@ const RESPONSE_FIELDS = [
 
 describe('customer bookings', () => {
   let t: TestContext;
+  let seededParcelId: string;
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -30,6 +31,10 @@ describe('customer bookings', () => {
     const customer2 = await t.prisma.user.findUniqueOrThrow({
       where: { email: 'customer2@swiftdrop.test' },
     });
+    const seededParcel = await t.prisma.parcel.findUniqueOrThrow({
+      where: { trackingNumber: 'SD100000001' },
+    });
+    seededParcelId = seededParcel.id;
     const common = {
       senderName: 'M03 Sender',
       senderPhone: '+94770000001',
@@ -135,4 +140,37 @@ describe('customer bookings', () => {
 
     expect(response.body.error.code).toBe('FORBIDDEN');
   });
+
+  it('returns an authorized parcel receipt as a PDF attachment', async () => {
+    const response = await request(t.http)
+      .get(`/api/v1/parcels/${seededParcelId}/receipt`)
+      .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
+      .expect(200)
+      .expect('Content-Type', /application\/pdf/)
+      .expect('Content-Disposition', 'attachment; filename="swiftdrop-receipt-SD100000001.pdf"');
+
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    expect(response.body.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it("returns 404 for another customer's parcel receipt", async () => {
+    const response = await request(t.http)
+      .get(`/api/v1/parcels/${seededParcelId}/receipt`)
+      .set('Cookie', await t.cookieFor('CUSTOMER', 'customer2@swiftdrop.test'))
+      .expect(404);
+
+    expect(response.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it.each(['COURIER', 'MERCHANT'] as const)(
+    'denies the %s role access to customer receipts',
+    async (role) => {
+      const response = await request(t.http)
+        .get(`/api/v1/parcels/${seededParcelId}/receipt`)
+        .set('Cookie', await t.cookieFor(role))
+        .expect(403);
+
+      expect(response.body.error.code).toBe('FORBIDDEN');
+    },
+  );
 });

@@ -3,11 +3,12 @@ import type { Paginated } from '@swiftdrop/contracts';
 import type { Prisma } from '@swiftdrop/db';
 import type { Readable } from 'node:stream';
 import type { AuthUser } from '../../common/auth';
-import { notImplemented } from '../../common/errors/app-error';
+import { notFound, notImplemented } from '../../common/errors/app-error';
 import { paginated } from '../../common/pagination/pagination';
 import { PrismaService } from '../../infra/prisma';
 import { ParcelsService, type ParcelDto } from '../parcels';
 import { toParcelDto } from './bookings.mapper';
+import { createReceiptPdf } from './bookings.receipt';
 import type { CreateBookingDto, ListMyParcelsQuery } from './dto/booking.dto';
 
 /**
@@ -49,7 +50,15 @@ export class BookingsService {
   }
 
   /** PDF receipt via pdfkit. */
-  async receiptPdf(_user: AuthUser, _id: string): Promise<{ filename: string; stream: Readable }> {
-    notImplemented('M3');
+  async receiptPdf(user: AuthUser, id: string): Promise<{ filename: string; stream: Readable }> {
+    const parcel = await this.prisma.parcel.findFirst({
+      where: { id, customerId: user.id },
+    });
+    if (!parcel) throw notFound('Parcel');
+
+    return {
+      filename: `swiftdrop-receipt-${parcel.trackingNumber}.pdf`,
+      stream: createReceiptPdf(parcel),
+    };
   }
 }

@@ -33,6 +33,10 @@ export class BookingsController {
 
   @Get(':id/receipt')
   @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    description: 'Parcel receipt PDF',
+    schema: { type: 'string', format: 'binary' },
+  })
   async receipt(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const { filename, stream } = await this.bookings.receiptPdf(user, id);
     return new StreamableFile(stream, {
