@@ -1,10 +1,19 @@
 import type { ParcelStatus } from '@swiftdrop/contracts';
 import Link from 'next/link';
-import { Button, EmptyState, STATUS_LABEL, StatusBadge, Table } from '@/components/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  STATUS_LABEL,
+  StatusBadge,
+  Table,
+} from '@/components/ui';
 import type { components } from '@/lib/api/schema';
 
 type DeliveryPage = components['schemas']['ParcelPageDto'];
 type Delivery = components['schemas']['ParcelDto'];
+type CustomerParcel = components['schemas']['CustomerParcelDetailDto'];
 
 function formatFee(feeCents: number, currency: string) {
   return new Intl.NumberFormat('en-LK', {
@@ -16,6 +25,22 @@ function formatFee(feeCents: number, currency: string) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('en-LK', { dateStyle: 'medium' }).format(new Date(value));
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('en-LK', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-1 text-sm text-ink">{children}</dd>
+    </div>
+  );
 }
 
 function pageHref(page: number, status?: ParcelStatus) {
@@ -173,6 +198,107 @@ export function DeliveriesDashboard({
           </div>
         </nav>
       )}
+    </div>
+  );
+}
+
+export function ParcelDetails({ parcel }: { parcel: CustomerParcel }) {
+  return (
+    <div>
+      <PageHeader
+        title={parcel.trackingNumber}
+        description={`${parcel.pickupCity} to ${parcel.dropoffCity}`}
+        actions={
+          <a
+            href={`/api/v1/parcels/${parcel.id}/receipt`}
+            aria-label={`Download receipt for ${parcel.trackingNumber}`}
+            className={`${linkButton} bg-brand text-white hover:bg-brand-dark`}
+          >
+            Download receipt
+          </a>
+        }
+      />
+
+      <Link href="/customer" className="mb-5 inline-block text-sm font-medium text-brand">
+        ← Back to my deliveries
+      </Link>
+
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-muted">Current status</p>
+              <div className="mt-2">
+                <StatusBadge status={parcel.status} />
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-muted">Delivery fee</p>
+              <p className="mt-1 text-lg font-semibold">
+                {formatFee(parcel.feeCents, parcel.currency)}
+              </p>
+            </div>
+          </div>
+
+          <dl className="mt-6 grid gap-5 border-t border-line pt-5 sm:grid-cols-2">
+            <Detail label="Sender">{parcel.senderName}</Detail>
+            <Detail label="Recipient">{parcel.recipientName}</Detail>
+            <Detail label="Pickup">
+              {parcel.pickupAddress}, {parcel.pickupCity}
+            </Detail>
+            <Detail label="Drop-off">
+              {parcel.dropoffAddress}, {parcel.dropoffCity}
+            </Detail>
+          </dl>
+        </Card>
+
+        <Card>
+          <h2 className="font-semibold">Parcel</h2>
+          <dl className="mt-4 space-y-4">
+            <Detail label="Size">{parcel.size.toLowerCase()}</Detail>
+            <Detail label="Weight">{parcel.weightKg} kg</Detail>
+            <Detail label="Booked">{formatDateTime(parcel.createdAt)}</Detail>
+            {parcel.deliveredAt && (
+              <Detail label="Delivered">{formatDateTime(parcel.deliveredAt)}</Detail>
+            )}
+          </dl>
+        </Card>
+      </div>
+
+      <Card className="mt-5">
+        <div>
+          <h2 className="font-semibold">Status timeline</h2>
+          <p className="mt-1 text-sm text-muted">Status updates recorded for this delivery.</p>
+        </div>
+
+        {parcel.history.length > 0 ? (
+          <ol className="mt-6 space-y-5">
+            {parcel.history.map((entry, index) => (
+              <li key={`${entry.status}-${entry.at}`} className="relative flex gap-4">
+                {index < parcel.history.length - 1 && (
+                  <span
+                    className="absolute left-2 top-5 h-[calc(100%+0.25rem)] w-px bg-line"
+                    aria-hidden="true"
+                  />
+                )}
+                <span
+                  className="relative mt-1.5 h-4 w-4 shrink-0 rounded-full border-4 border-brand-soft bg-brand"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 pb-1">
+                  <p className="font-medium">{STATUS_LABEL[entry.status as ParcelStatus]}</p>
+                  <time className="text-sm text-muted" dateTime={entry.at}>
+                    {formatDateTime(entry.at)}
+                  </time>
+                  {entry.reason && <p className="mt-1 text-sm text-muted">{entry.reason}</p>}
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-5 text-sm text-muted">No status updates are available yet.</p>
+        )}
+      </Card>
     </div>
   );
 }

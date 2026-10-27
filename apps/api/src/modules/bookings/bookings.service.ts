@@ -3,13 +3,17 @@ import type { Paginated } from '@swiftdrop/contracts';
 import type { Prisma } from '@swiftdrop/db';
 import type { Readable } from 'node:stream';
 import type { AuthUser } from '../../common/auth';
-import { notFound, notImplemented } from '../../common/errors/app-error';
+import { notFound } from '../../common/errors/app-error';
 import { paginated } from '../../common/pagination/pagination';
 import { PrismaService } from '../../infra/prisma';
 import { ParcelsService, type ParcelDto } from '../parcels';
 import { toParcelDto } from './bookings.mapper';
 import { createReceiptPdf } from './bookings.receipt';
-import type { CreateBookingDto, ListMyParcelsQuery } from './dto/booking.dto';
+import type {
+  CreateBookingDto,
+  CustomerParcelDetailDto,
+  ListMyParcelsQuery,
+} from './dto/booking.dto';
 
 /**
  * Customer-facing booking flow. Delegates creation to ParcelsService (M4) and fees to
@@ -49,8 +53,25 @@ export class BookingsService {
   }
 
   /** 404 (not 403) when the parcel belongs to someone else — don't leak existence. */
-  async getMine(_user: AuthUser, _id: string): Promise<ParcelDto> {
-    notImplemented('M3');
+  async getMine(user: AuthUser, id: string): Promise<CustomerParcelDetailDto> {
+    const parcel = await this.prisma.parcel.findFirst({
+      where: { id, customerId: user.id },
+      include: {
+        statusHistory: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+    if (!parcel) throw notFound('Parcel');
+
+    return {
+      ...toParcelDto(parcel),
+      history: parcel.statusHistory.map((entry) => ({
+        status: entry.toStatus,
+        at: entry.createdAt,
+        reason: entry.reason,
+      })),
+    };
   }
 
   /** PDF receipt via pdfkit. */

@@ -38,6 +38,7 @@ const RESPONSE_FIELDS = [
 describe('customer bookings', () => {
   let t: TestContext;
   let seededParcelId: string;
+  let historyParcelId: string;
   let customerId: string;
   let createParcel: jest.SpiedFunction<ParcelsService['create']>;
 
@@ -54,6 +55,10 @@ describe('customer bookings', () => {
       where: { trackingNumber: 'SD100000001' },
     });
     seededParcelId = seededParcel.id;
+    const historyParcel = await t.prisma.parcel.findUniqueOrThrow({
+      where: { trackingNumber: 'SD100000002' },
+    });
+    historyParcelId = historyParcel.id;
     createParcel = jest.spyOn(t.app.get(ParcelsService), 'create').mockResolvedValue(seededParcel);
     const common = {
       senderName: 'M03 Sender',
@@ -202,6 +207,53 @@ describe('customer bookings', () => {
 
     expect(response.body.error.code).toBe('FORBIDDEN');
   });
+
+  it('returns an owned parcel with ordered privacy-safe status history', async () => {
+    const response = await request(t.http)
+      .get(`/api/v1/parcels/${historyParcelId}`)
+      .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      id: historyParcelId,
+      trackingNumber: 'SD100000002',
+      status: 'IN_TRANSIT',
+    });
+    expect(response.body.history.map((entry: { status: string }) => entry.status)).toEqual([
+      'CREATED',
+      'PICKED_UP',
+      'IN_TRANSIT',
+    ]);
+    for (const entry of response.body.history) {
+      expect(Object.keys(entry).sort()).toEqual(['at', 'reason', 'status']);
+    }
+    expect(response.body).not.toHaveProperty('senderPhone');
+    expect(response.body).not.toHaveProperty('recipientPhone');
+    expect(response.body).not.toHaveProperty('recipientEmail');
+    expect(response.body).not.toHaveProperty('description');
+    expect(response.body).not.toHaveProperty('internalNotes');
+  });
+
+  it("returns 404 for another customer's parcel details", async () => {
+    const response = await request(t.http)
+      .get(`/api/v1/parcels/${seededParcelId}`)
+      .set('Cookie', await t.cookieFor('CUSTOMER', 'customer2@swiftdrop.test'))
+      .expect(404);
+
+    expect(response.body.error.code).toBe('NOT_FOUND');
+  });
+
+  it.each(['COURIER', 'MERCHANT'] as const)(
+    'denies the %s role access to customer parcel details',
+    async (role) => {
+      const response = await request(t.http)
+        .get(`/api/v1/parcels/${seededParcelId}`)
+        .set('Cookie', await t.cookieFor(role))
+        .expect(403);
+
+      expect(response.body.error.code).toBe('FORBIDDEN');
+    },
+  );
 
   it('returns an authorized parcel receipt as a PDF attachment', async () => {
     const response = await request(t.http)

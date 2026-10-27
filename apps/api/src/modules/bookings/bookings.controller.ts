@@ -9,7 +9,12 @@ import {
 import { CurrentUser, Roles, type AuthUser } from '../../common/auth';
 import { ParcelDto } from '../parcels';
 import { BookingsService } from './bookings.service';
-import { CreateBookingDto, ListMyParcelsQuery, ParcelPageDto } from './dto/booking.dto';
+import {
+  CreateBookingDto,
+  CustomerParcelDetailDto,
+  ListMyParcelsQuery,
+  ParcelPageDto,
+} from './dto/booking.dto';
 
 /** Owner: M3 */
 @ApiTags('bookings')
@@ -32,7 +37,7 @@ export class BookingsController {
   }
 
   @Get(':id')
-  @ApiOkResponse({ type: ParcelDto })
+  @ApiOkResponse({ type: CustomerParcelDetailDto })
   getOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.bookings.getMine(user, id);
   }

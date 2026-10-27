@@ -24,3 +24,17 @@ export class ParcelPageDto {
   @ApiProperty({ type: [ParcelDto] }) data: ParcelDto[];
   @ApiProperty({ type: ParcelPageMetaDto }) meta: ParcelPageMetaDto;
 }
+
+export class CustomerParcelHistoryItemDto {
+  @ApiProperty({ enum: PARCEL_STATUSES }) status: ParcelStatus;
+  @ApiProperty({ type: String, format: 'date-time' }) at: Date;
+  @ApiProperty({ nullable: true, type: String }) reason: string | null;
+}
+
+export class CustomerParcelDetailDto extends ParcelDto {
+  @ApiProperty({ nullable: true, type: String, format: 'date-time' })
+  declare deliveredAt: Date | null;
+
+  @ApiProperty({ type: [CustomerParcelHistoryItemDto] })
+  history: CustomerParcelHistoryItemDto[];
+}

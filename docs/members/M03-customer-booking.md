@@ -91,6 +91,17 @@ Mobile-friendly. Use the `@/components/ui` kit. Validate on the client for UX, b
   booking fields, requests real M7 estimates, invalidates stale estimates and only shows success
   after M4 returns a created parcel. Wrapper tests mock M4 only and cover field mapping, ownership,
   role restrictions and rejection of client-sent fees.
+- 2026-10-27: Added the authorized customer parcel detail slice. `GET /parcels/:id` scopes the
+  lookup to the authenticated customer and exposes an explicit parcel projection plus ordered,
+  privacy-safe persisted status history. `/customer/parcels/[id]` now shows delivery details, the
+  status timeline and an authorized receipt download, with loading, error and not-found handling.
+- No M4 contract change was needed for the static timeline: the M03 response extends the exported
+  parcel DTO with an additive customer-detail response shaped consistently with M4's tracking DTO
+  and reads the append-only history relation.
 - Remaining blockers: booking confirmation requires M4's `ParcelsService.create()` implementation;
   price estimates require M7's `PricingService.estimate()` implementation; detail-page live status
-  requires M4's tracking hook and SSE implementation.
+  requires M4's tracking hook and SSE implementation. Ask M4 to provide the reusable customer-safe
+  tracking component/hook promised by the module interface once SSE/public tracking is implemented.
+  Delivered proof display remains blocked on M6 implementing the authorized
+  `GET /parcels/:id/proof/photo` stream; the page does not infer proof existence or request a fake
+  image while that service method is unfinished.
