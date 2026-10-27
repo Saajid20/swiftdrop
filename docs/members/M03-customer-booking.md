@@ -78,4 +78,12 @@ Mobile-friendly. Use the `@/components/ui` kit. Validate on the client for UX, b
 
 ## Status / notes
 
-_Update as you go._
+- 2026-10-27: Completed the "My deliveries" vertical slice. `GET /parcels/mine` now returns an
+  explicitly mapped, paginated customer-only projection with optional status filtering and stable
+  newest-first ordering. The customer dashboard includes filtering, pagination, loading, error and
+  empty states, plus booking and parcel-detail links.
+- Added unit and integration coverage for the mapper, customer isolation, role restrictions,
+  filtering, pagination and exclusion of private parcel fields.
+- Remaining blockers: booking confirmation requires M4's `ParcelsService.create()` implementation;
+  price estimates require M7's `PricingService.estimate()` implementation; detail-page live status
+  requires M4's tracking hook and SSE implementation.

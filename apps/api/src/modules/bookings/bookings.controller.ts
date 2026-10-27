@@ -3,7 +3,7 @@ import { ApiOkResponse, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagg
 import { CurrentUser, Roles, type AuthUser } from '../../common/auth';
 import { ParcelDto } from '../parcels';
 import { BookingsService } from './bookings.service';
-import { CreateBookingDto, ListMyParcelsQuery } from './dto/booking.dto';
+import { CreateBookingDto, ListMyParcelsQuery, ParcelPageDto } from './dto/booking.dto';
 
 /** Owner: M3 */
 @ApiTags('bookings')
@@ -20,6 +20,7 @@ export class BookingsController {
   }
 
   @Get('mine')
+  @ApiOkResponse({ type: ParcelPageDto })
   listMine(@CurrentUser() user: AuthUser, @Query() q: ListMyParcelsQuery) {
     return this.bookings.listMine(user, q);
   }
