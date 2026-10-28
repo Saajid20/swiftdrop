@@ -1,14 +1,14 @@
 'use client';
 
-import { Alert, Button, PageHeader } from '@/components/ui';
+import { Alert, Button } from '@/components/ui';
 
+/** Applies to every /customer page, so the copy stays generic. */
 export default function CustomerError({ reset }: { reset: () => void }) {
   return (
     <>
-      <PageHeader title="My deliveries" description="Your bookings and their current status" />
       <Alert tone="error">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span>We could not load your deliveries. Please try again.</span>
+          <span>We could not load this page. Please try again.</span>
           <Button type="button" variant="secondary" onClick={reset}>
             Try again
           </Button>

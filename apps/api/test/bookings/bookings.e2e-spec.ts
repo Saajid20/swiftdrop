@@ -41,6 +41,8 @@ describe('customer bookings', () => {
   let historyParcelId: string;
   let customerId: string;
   let createParcel: jest.SpiedFunction<ParcelsService['create']>;
+  /** How many parcels customer@ owns. Counted, not hard-coded, so other suites can add parcels. */
+  let ownTotal: number;
 
   beforeAll(async () => {
     t = await createTestApp();
@@ -59,6 +61,8 @@ describe('customer bookings', () => {
       where: { trackingNumber: 'SD100000002' },
     });
     historyParcelId = historyParcel.id;
+    // ParcelsService.create (M4) needs PricingService.estimate (M7), which is still a stub. Bookings
+    // only maps the request and delegates, so mock the call. TODO(M3): drop the mock once M7 lands.
     createParcel = jest.spyOn(t.app.get(ParcelsService), 'create').mockResolvedValue(seededParcel);
     const common = {
       senderName: 'M03 Sender',
@@ -100,6 +104,7 @@ describe('customer bookings', () => {
         },
       ],
     });
+    ownTotal = await t.prisma.parcel.count({ where: { customerId: customer.id } });
   });
 
   afterAll(async () => {
@@ -162,7 +167,7 @@ describe('customer bookings', () => {
       .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
       .expect(200);
 
-    expect(response.body.data).toHaveLength(5);
+    expect(response.body.data).toHaveLength(ownTotal);
     expect(response.body.data.map((parcel: { id: string }) => parcel.id)).not.toContain(
       'm03-customer-2',
     );
@@ -196,11 +201,11 @@ describe('customer bookings', () => {
 
     expect(first.body).toMatchObject({
       data: [expect.objectContaining({ id: 'm03-page-b' })],
-      meta: { page: 1, pageSize: 1, total: 5 },
+      meta: { page: 1, pageSize: 1, total: ownTotal },
     });
     expect(second.body).toMatchObject({
       data: [expect.objectContaining({ id: 'm03-page-a' })],
-      meta: { page: 2, pageSize: 1, total: 5 },
+      meta: { page: 2, pageSize: 1, total: ownTotal },
     });
   });
 
@@ -292,4 +297,53 @@ describe('customer bookings', () => {
       expect(response.body.error.code).toBe('FORBIDDEN');
     },
   );
+
+  describe('negative cases', () => {
+    const ENDPOINTS = [
+      ['POST', '/api/v1/parcels'],
+      ['GET', '/api/v1/parcels/mine'],
+      ['GET', '/api/v1/parcels/some-id'],
+      ['GET', '/api/v1/parcels/some-id/receipt'],
+    ] as const;
+
+    const call = (method: 'GET' | 'POST', url: string) =>
+      method === 'POST' ? request(t.http).post(url).send(VALID_BOOKING) : request(t.http).get(url);
+
+    it.each(ENDPOINTS)('%s %s requires a session (401)', async (method, url) => {
+      const response = await call(method, url).expect(401);
+      expect(response.body.error.code).toBe('UNAUTHENTICATED');
+      expect(createParcel).not.toHaveBeenCalled();
+    });
+
+    it.each(['DISPATCHER', 'ADMIN'] as const)('denies staff role %s (403)', async (role) => {
+      const cookie = await t.cookieFor(role);
+      for (const [method, url] of ENDPOINTS) {
+        const response = await call(method, url).set('Cookie', cookie).expect(403);
+        expect(response.body.error.code).toBe('FORBIDDEN');
+      }
+      expect(createParcel).not.toHaveBeenCalled();
+    });
+
+    it.each(['status=BOGUS', 'pageSize=101', 'page=0'])(
+      'rejects an invalid list query (%s)',
+      async (query) => {
+        const response = await request(t.http)
+          .get(`/api/v1/parcels/mine?${query}`)
+          .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
+          .expect(400);
+        expect(response.body.error.code).toBe('VALIDATION_FAILED');
+      },
+    );
+
+    it('rejects a booking with missing required fields (400)', async () => {
+      const { recipientPhone: _omit, ...incomplete } = VALID_BOOKING;
+      const response = await request(t.http)
+        .post('/api/v1/parcels')
+        .set('Cookie', await t.cookieFor('CUSTOMER', 'customer@swiftdrop.test'))
+        .send(incomplete)
+        .expect(400);
+      expect(response.body.error.code).toBe('VALIDATION_FAILED');
+      expect(createParcel).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -211,7 +211,7 @@ export function ParcelDetails({ parcel }: { parcel: CustomerParcel }) {
         description={`${parcel.pickupCity} to ${parcel.dropoffCity}`}
         actions={
           <a
-            href={`/api/v1/parcels/${parcel.id}/receipt`}
+            href={`/api/v1/parcels/${encodeURIComponent(parcel.id)}/receipt`}
             aria-label={`Download receipt for ${parcel.trackingNumber}`}
             className={`${linkButton} bg-brand text-white hover:bg-brand-dark`}
           >

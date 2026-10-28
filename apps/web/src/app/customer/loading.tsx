@@ -1,6 +1,7 @@
+/** Applies to every /customer page; the skeleton matches the deliveries list, the most common one. */
 export default function CustomerLoading() {
   return (
-    <div className="animate-pulse" aria-label="Loading deliveries" aria-busy="true">
+    <div className="animate-pulse" aria-label="Loading" aria-busy="true">
       <div className="mb-6 flex items-end justify-between gap-4">
         <div className="space-y-2">
           <div className="h-7 w-40 rounded bg-line" />

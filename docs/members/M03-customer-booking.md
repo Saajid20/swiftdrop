@@ -123,3 +123,12 @@ Mobile-friendly. Use the `@/components/ui` kit. Validate on the client for UX, b
   The proof display remains runtime-blocked on M6 implementing the authorized
   `GET /parcels/:id/proof/photo` stream; it reports the failure and does not infer proof existence or
   request a fake image while that service method is unfinished.
+- **Review fixes (merge):** integration tests no longer hard-code the seeded parcel count, and now
+  cover 401 on all four endpoints, 403 for DISPATCHER/ADMIN, and 400 for bad list queries and
+  incomplete bookings. The customer-wide `loading.tsx`/`error.tsx` copy is generic (they also apply
+  to `/customer/book`), and the receipt link is URL-encoded.
+- **Known gaps:** the `features/booking/*.test.ts(x)` files use `node:test`, but `apps/web` has no
+  test runner yet (`pnpm test` only echoes), so they do not run in `make test` or CI. Ask M10 for a
+  web runner (e.g. vitest). `POST /parcels` and the estimate button only work end to end once M4's
+  `ParcelsService.create` and M7's `PricingService.estimate` are on main. Live tracking on the
+  detail page can use M4's `useLiveTracking` from `@/features/tracking` once PR #3 is merged.
